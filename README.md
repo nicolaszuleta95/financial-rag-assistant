@@ -12,7 +12,7 @@
 **RAG system that answers natural language questions over 500+ pages of banking 10-K filings
 with source citations — reducing financial document analysis from hours to seconds.**
 
-[🚀 Live Demo](#) · [📓 Notebooks](notebooks/) · [📊 Evaluation Results](reports/evaluation_results.md)
+[🚀 Live Demo](https://nicolaszuleta95-financial-rag-assistant.streamlit.app/) · [📓 Notebooks](notebooks/) · [📊 Evaluation Results](reports/evaluation_results.md)
 
 </div>
 
@@ -109,10 +109,9 @@ The Streamlit app includes:
 - **Suggested questions** — 5 example questions to explore the system's capabilities
 - **Token counter** — transparency on API usage per session
 
-👉 [**Try the live demo →**](#)
+👉 [**Try the live demo →**](https://nicolaszuleta95-financial-rag-assistant.streamlit.app/)
 
-> *Add screenshot here after deploy*
-> `![App Screenshot](reports/app_screenshot.png)`
+> ![App Screenshot](reports/app_screenshot.png)
 
 ### Example interactions
 
