@@ -1,0 +1,22 @@
+# Secrets — NUNCA al repo
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# Mac
+.DS_Store
+
+# Data — PDFs son grandes
+data/raw/*.pdf
+
+# NOTA: data/processed/ SÍ va al repo (chunks_processed.json)
+# NOTA: vectorstore/ SÍ va al repo (necesario para Streamlit Cloud)
+.venv/
+key.txt
+
+AGENTS.md
