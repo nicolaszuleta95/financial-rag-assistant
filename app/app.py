@@ -6,7 +6,6 @@ Sections:
   - Main: conversational chat interface with sources panel.
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -27,14 +26,14 @@ st.set_page_config(
     layout="wide",
 )
 
-# Streamlit Cloud: read API key from secrets; local: read from .env
+# Streamlit Cloud: read API key from secrets; local: load_dotenv() in rag_chain handles it
 _secrets_paths = [
     Path.home() / ".streamlit" / "secrets.toml",
     ROOT / ".streamlit" / "secrets.toml",
 ]
-if any(p.exists() for p in _secrets_paths):
-    if "OPENAI_API_KEY" in st.secrets:
-        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+_openai_api_key: str | None = None
+if any(p.exists() for p in _secrets_paths) and "OPENAI_API_KEY" in st.secrets:
+    _openai_api_key = st.secrets["OPENAI_API_KEY"]
 
 from src.rag_chain import FinancialRAGChain  # noqa: E402
 from src.vectorstore import load_vectorstore  # noqa: E402
@@ -60,6 +59,14 @@ SUGGESTED_QUESTIONS = [
 
 VECTORSTORE_DIR = str(ROOT / "vectorstore")
 
+# Rate-limiting thresholds per session
+_TOKEN_LIMIT = 10_000   # ~$0.003 at gpt-4o-mini blended pricing
+_REQUEST_LIMIT = 20     # max questions per session
+_TOKEN_WARNING = 0.80   # warn at 80 % of token limit
+
+# gpt-4o-mini blended cost (input $0.15 + output $0.60 averaged) in USD per token
+_COST_PER_TOKEN = 0.000_000_375
+
 # ---------------------------------------------------------------------------
 # Cached resources — loaded once per session
 # ---------------------------------------------------------------------------
@@ -71,9 +78,9 @@ def _load_vectorstore():
 
 
 @st.cache_resource(show_spinner="Initialising RAG chain…")
-def _load_chain(bank_filter: str | None):
+def _load_chain(bank_filter: str | None, api_key: str | None = None):
     vs = _load_vectorstore()
-    return FinancialRAGChain(vs, bank_filter=bank_filter)
+    return FinancialRAGChain(vs, bank_filter=bank_filter, api_key=api_key)
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +91,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "total_tokens" not in st.session_state:
     st.session_state.total_tokens = 0
+if "request_count" not in st.session_state:
+    st.session_state.request_count = 0
 if "selected_bank" not in st.session_state:
     st.session_state.selected_bank = "All Banks"
 if "pending_question" not in st.session_state:
@@ -109,6 +118,7 @@ with st.sidebar:
         st.session_state.selected_bank = selected_bank_label
         st.session_state.messages = []
         st.session_state.total_tokens = 0
+        st.session_state.request_count = 0
         st.rerun()
 
     st.caption("**Year:** 2023")
@@ -117,12 +127,19 @@ with st.sidebar:
     if st.button("🗑 Clear Conversation", use_container_width=True):
         st.session_state.messages = []
         st.session_state.total_tokens = 0
+        st.session_state.request_count = 0
         bank_filter = BANK_OPTIONS[st.session_state.selected_bank]
-        chain = _load_chain(bank_filter)
+        chain = _load_chain(bank_filter, api_key=_openai_api_key)
         chain.clear_memory()
         st.rerun()
 
-    st.metric("Tokens used (session)", st.session_state.total_tokens)
+    # Usage metrics
+    token_pct = st.session_state.total_tokens / _TOKEN_LIMIT
+    est_cost = st.session_state.total_tokens * _COST_PER_TOKEN
+    st.metric("Tokens used (session)", f"{st.session_state.total_tokens:,} / {_TOKEN_LIMIT:,}")
+    st.progress(min(token_pct, 1.0))
+    st.metric("Requests (session)", f"{st.session_state.request_count} / {_REQUEST_LIMIT}")
+    st.caption(f"Estimated cost: ${est_cost:.5f}")
     st.divider()
 
     st.subheader("Suggested Questions")
@@ -142,7 +159,7 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 
 bank_filter = BANK_OPTIONS[st.session_state.selected_bank]
-chain = _load_chain(bank_filter)
+chain = _load_chain(bank_filter, api_key=_openai_api_key)
 
 st.title("🏦 Financial RAG Assistant")
 st.caption(
@@ -176,6 +193,25 @@ if user_input:
         st.warning("Please enter a question.")
         st.stop()
 
+    # --- Rate limiting checks ---
+    if st.session_state.request_count >= _REQUEST_LIMIT:
+        st.error(
+            f"Session limit reached: {_REQUEST_LIMIT} requests per session. "
+            "Click **Clear Conversation** to start a new session."
+        )
+        st.stop()
+
+    if st.session_state.total_tokens >= _TOKEN_LIMIT:
+        st.error(
+            f"Session token limit reached ({_TOKEN_LIMIT:,} tokens). "
+            "Click **Clear Conversation** to start a new session."
+        )
+        st.stop()
+
+    if st.session_state.total_tokens >= _TOKEN_LIMIT * _TOKEN_WARNING:
+        tokens_left = _TOKEN_LIMIT - st.session_state.total_tokens
+        st.warning(f"Approaching session token limit — ~{tokens_left:,} tokens remaining.")
+
     # Display user message
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
@@ -208,4 +244,5 @@ if user_input:
         }
     )
     st.session_state.total_tokens += result["tokens_used"]
+    st.session_state.request_count += 1
     st.rerun()

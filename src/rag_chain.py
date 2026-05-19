@@ -42,6 +42,7 @@ class FinancialRAGChain:
         self,
         vectorstore: Chroma,
         bank_filter: str | None = None,
+        api_key: str | None = None,
     ) -> None:
         """Initialise the RAG chain.
 
@@ -59,6 +60,7 @@ class FinancialRAGChain:
             model=_LLM_MODEL,
             temperature=_TEMPERATURE,
             max_tokens=_MAX_TOKENS,
+            api_key=api_key,  # None → falls back to OPENAI_API_KEY env var (local/.env)
         )
 
         self.memory = ConversationBufferWindowMemory(
