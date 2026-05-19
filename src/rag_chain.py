@@ -2,7 +2,7 @@
 rag_chain.py — Core RAG pipeline for the Financial RAG Assistant.
 
 FinancialRAGChain wraps LangChain's ConversationalRetrievalChain, wiring
-together the ChromaDB vectorstore, gpt-4o-mini, and ConversationBufferMemory.
+together the ChromaDB vectorstore, gpt-4o-mini, and ConversationBufferWindowMemory.
 It exposes a simple .ask() interface used by both the notebooks and the
 Streamlit app.
 """
@@ -12,7 +12,7 @@ from __future__ import annotations
 import tiktoken
 from dotenv import load_dotenv
 from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferWindowMemory
 from langchain_chroma import Chroma
 from langchain_openai import ChatOpenAI
 
@@ -24,6 +24,7 @@ _LLM_MODEL = "gpt-4o-mini"
 _TEMPERATURE = 0
 _MAX_TOKENS = 500
 _TOP_K = 4
+_MEMORY_WINDOW = 5  # conversation turns to keep in memory
 
 
 class FinancialRAGChain:
@@ -60,10 +61,11 @@ class FinancialRAGChain:
             max_tokens=_MAX_TOKENS,
         )
 
-        self.memory = ConversationBufferMemory(
+        self.memory = ConversationBufferWindowMemory(
             memory_key="chat_history",
             return_messages=True,
             output_key="answer",
+            k=_MEMORY_WINDOW,
         )
 
         # Build retriever — apply metadata filter when requested
