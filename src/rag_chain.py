@@ -9,6 +9,7 @@ Streamlit app.
 
 from __future__ import annotations
 
+import tiktoken
 from dotenv import load_dotenv
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
@@ -50,6 +51,8 @@ class FinancialRAGChain:
         """
         self.vectorstore = vectorstore
         self._bank_filter = bank_filter
+
+        self._tokenizer = tiktoken.encoding_for_model(_LLM_MODEL)
 
         self.llm = ChatOpenAI(
             model=_LLM_MODEL,
@@ -117,9 +120,9 @@ class FinancialRAGChain:
             for doc in result.get("source_documents", [])
         ]
 
-        # Approximate token count — LangChain doesn't expose exact usage here
         answer_text: str = result.get("answer", "")
-        tokens_used = len(question.split()) + len(answer_text.split())
+        context_text = " ".join(doc.page_content for doc in result.get("source_documents", []))
+        tokens_used = len(self._tokenizer.encode(question + context_text + answer_text))
 
         return {
             "answer": answer_text,
